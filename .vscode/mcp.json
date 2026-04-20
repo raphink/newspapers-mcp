@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "newspapers-mcp": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["build/index.js"]
+    }
+  }
+}
