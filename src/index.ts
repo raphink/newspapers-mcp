@@ -587,14 +587,8 @@ app.get(["/", "/health"], (_req: express.Request, res: express.Response) => {
 // Named export for GCP Cloud Functions
 export const newspapersMcp = app;
 
-// Determine how to start based on environment
-if (process.env.K_SERVICE) {
-  const PORT = process.env.PORT || 8080;
-  app.listen(PORT, () => {
-    console.error(`Newspapers MCP Server running on HTTP port ${PORT}`);
-  });
-} else {
-  // Running locally - use stdio transport
+// When running locally, use stdio transport instead
+if (!process.env.K_SERVICE) {
   main().catch((error) => {
     console.error("Fatal error in main():", error);
     process.exit(1);
