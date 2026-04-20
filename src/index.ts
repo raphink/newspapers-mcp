@@ -206,9 +206,9 @@ server.registerTool(
       const hitsMatch = html.match(/<title>digiPress:\s*(\d+)\s*Treffer<\/title>/);
       const totalHits = hitsMatch ? hitsMatch[1] : "unknown";
 
-      // Extract result items: title, date, link
+      // Extract result items: title, accessory (date info), and link
       const results: Array<{title: string; date: string; link: string}> = [];
-      const itemRegex = /<a\s+href="(\/view\/[^"]+)"[^>]*>\s*([^<]+)<\/a>\s*([^\n<]+)/g;
+      const itemRegex = /<a\s+class="srTitle"\s*\n?\s*href="(\/view\/[^"]+)"[^>]*>([^<]+)<\/a>\s*\n?\s*<span\s+class="srTitleAccessory">([^<]+)<\/span>/g;
       let match;
       while ((match = itemRegex.exec(html)) !== null && results.length < rows) {
         results.push({
