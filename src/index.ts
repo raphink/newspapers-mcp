@@ -2,8 +2,11 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import axios from "axios";
+import express from "express";
+import cors from "cors";
 
 // Initialize the MCP server
 const server = new McpServer({
@@ -523,7 +526,38 @@ async function main() {
   console.error("Newspapers MCP Server running on stdio");
 }
 
-main().catch((error) => {
-  console.error("Fatal error in main():", error);
-  process.exit(1);
-});
+// HTTP entry point for Google Cloud Functions
+export async function newspapersMcp(req: express.Request, res: express.Response) {
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+  });
+  res.on("close", () => {
+    transport.close().catch(console.error);
+  });
+  await server.connect(transport);
+  await transport.handleRequest(req, res, req.body);
+}
+
+// Determine how to start based on environment
+if (process.env.K_SERVICE) {
+  // Running in Cloud Functions
+  const app = express();
+  app.use(cors());
+  app.use(express.json());
+
+  app.post("/", newspapersMcp);
+  app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok" });
+  });
+
+  const PORT = process.env.PORT || 8080;
+  app.listen(PORT, () => {
+    console.error(`Newspapers MCP Server running on HTTP port ${PORT}`);
+  });
+} else {
+  // Running locally - use stdio transport
+  main().catch((error) => {
+    console.error("Fatal error in main():", error);
+    process.exit(1);
+  });
+}

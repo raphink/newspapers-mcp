@@ -15,7 +15,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
     "axios": "^1.6.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "express": "^4.18.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {
