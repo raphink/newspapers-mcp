@@ -3,16 +3,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { z } from "zod";
 import axios from "axios";
 import express from "express";
 import cors from "cors";
-
-// Initialize the MCP server
-const server = new McpServer({
-  name: "newspapers-mcp",
-  version: "1.0.0",
-});
+import { NoOpOAuthProvider } from "./oauth-provider.js";
 
 // Schema definitions for tool inputs
 const searchSchema = z.object({
@@ -22,6 +18,8 @@ const searchSchema = z.object({
   page: z.number().optional().default(1).describe("Page number for results"),
   rows: z.number().optional().default(20).describe("Number of results per page"),
 });
+
+function registerTools(server: McpServer) {
 
 // ========== EUROPEANA (Europe) ==========
 server.registerTool(
@@ -462,6 +460,8 @@ server.registerTool(
   }
 );
 
+} // end registerTools
+
 // Helper functions for individual searches
 async function searchEuropeana(query: string, dateFrom?: string, dateTo?: string): Promise<string> {
   try {
@@ -519,37 +519,76 @@ async function searchChroniclingAmerica(query: string, dateFrom?: string, dateTo
   }
 }
 
-// Main function to start the server
+// Main function to start the server (stdio)
 async function main() {
+  const server = new McpServer({
+    name: "newspapers-mcp",
+    version: "1.0.0",
+  });
+  registerTools(server);
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Newspapers MCP Server running on stdio");
 }
 
 // HTTP entry point for Google Cloud Functions
-export async function newspapersMcp(req: express.Request, res: express.Response): Promise<void> {
+const app = express();
+app.set("trust proxy", 1);
+app.use(cors());
+
+// Lazily initialize OAuth auth router on first request
+let authHandler: express.RequestHandler | null = null;
+
+app.use((req, res, next) => {
+  if (!authHandler) {
+    const serverUrl = `${req.protocol}://${req.get("host")}`;
+    console.log(`[init] OAuth provider serverUrl=${serverUrl}`);
+    const provider = new NoOpOAuthProvider();
+    authHandler = mcpAuthRouter({
+      provider,
+      issuerUrl: new URL(serverUrl),
+      resourceName: "Newspapers MCP",
+      scopesSupported: [],
+    });
+  }
+  authHandler(req, res, next);
+});
+
+// MCP StreamableHTTP endpoint
+app.post("/mcp", express.json({ limit: "1mb" }), async (req, res) => {
+  const mcpServer = new McpServer({
+    name: "newspapers-mcp",
+    version: "1.0.0",
+  });
+  registerTools(mcpServer);
+
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
   res.on("close", () => {
-    transport.close().catch(console.error);
+    transport.close().catch(() => {});
+    mcpServer.close().catch(() => {});
   });
-  await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
-}
+
+  try {
+    await mcpServer.connect(transport);
+    await transport.handleRequest(req, res, req.body ?? {});
+  } catch (err) {
+    console.error("[mcp] error:", err);
+    if (!res.headersSent) res.status(500).json({ error: String(err) });
+  }
+});
+
+// Health check
+app.get(["/", "/health"], (_req: express.Request, res: express.Response) => {
+  res.json({ status: "ok", server: "newspapers-mcp", version: "1.0.0" });
+});
+
+// Named export for GCP Cloud Functions
+export const newspapersMcp = app;
 
 // Determine how to start based on environment
 if (process.env.K_SERVICE) {
-  // Running in Cloud Functions
-  const app = express();
-  app.use(cors());
-  app.use(express.json());
-
-  app.post("/", newspapersMcp);
-  app.get("/health", (req: express.Request, res: express.Response) => {
-    res.status(200).json({ status: "ok" });
-  });
-
   const PORT = process.env.PORT || 8080;
   app.listen(PORT, () => {
     console.error(`Newspapers MCP Server running on HTTP port ${PORT}`);
