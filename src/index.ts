@@ -527,7 +527,7 @@ async function main() {
 }
 
 // HTTP entry point for Google Cloud Functions
-export async function newspapersMcp(req: express.Request, res: express.Response) {
+export async function newspapersMcp(req: express.Request, res: express.Response): Promise<void> {
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
@@ -546,7 +546,7 @@ if (process.env.K_SERVICE) {
   app.use(express.json());
 
   app.post("/", newspapersMcp);
-  app.get("/health", (req, res) => {
+  app.get("/health", (req: express.Request, res: express.Response) => {
     res.status(200).json({ status: "ok" });
   });
 
