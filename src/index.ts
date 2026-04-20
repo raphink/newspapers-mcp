@@ -67,8 +67,7 @@ server.registerTool(
         if (r.provider) entry += ` — ${r.provider}`;
         if (r.description) entry += `\n   ${r.description.substring(0, 300)}`;
         if (r.url) entry += `\n   Link: ${r.url}`;
-        if (r.thumbnail) entry += `\n   Thumbnail: ${r.thumbnail}`;
-        if (r.imageUrl) entry += `\n   Image: ${r.imageUrl}`;
+        if (r.imageUrl) entry += `\n   → newspapers_get_snippet(source: "europeana", document_id: "${r.imageUrl}")`;
         return entry;
       }).join("\n\n");
 
@@ -130,7 +129,7 @@ server.registerTool(
       const totalResults = totalMatch ? totalMatch[1] : "unknown";
 
       // Parse records from XML
-      const results: Array<{title: string; description: string; date: string; link: string; thumbnail: string}> = [];
+      const results: Array<{title: string; description: string; date: string; link: string; snippetDocId: string}> = [];
       const recordRegex = /<srw:record>([\s\S]*?)<\/srw:record>/g;
       let match;
       while ((match = recordRegex.exec(xml)) !== null && results.length < rows) {
@@ -139,14 +138,15 @@ server.registerTool(
         const dateMatch = rec.match(/<dc:date>([^<]+)<\/dc:date>/);
         const descMatch = rec.match(/<dc:description>([^<]+)<\/dc:description>/);
         const linkMatch = rec.match(/<link>([^<]+)<\/link>/);
-        const thumbMatch = rec.match(/<thumbnail>([^<]+)<\/thumbnail>/);
+        // Extract ark URI from <uri> element for IIIF (e.g. "bpt6k1832545v")
+        const uriMatch = rec.match(/<uri>([^<]+)<\/uri>/);
 
         results.push({
           title: titleMatch ? titleMatch[1] : "Untitled",
           date: dateMatch ? dateMatch[1] : "",
           description: descMatch ? descMatch[1] : "",
           link: linkMatch ? linkMatch[1] : "",
-          thumbnail: thumbMatch ? thumbMatch[1] : "",
+          snippetDocId: uriMatch ? `${uriMatch[1]}/f1` : "",
         });
       }
 
@@ -155,7 +155,7 @@ server.registerTool(
         if (r.date) entry += ` (${r.date})`;
         if (r.description) entry += `\n   ${r.description}`;
         if (r.link) entry += `\n   Link: ${r.link}`;
-        if (r.thumbnail) entry += `\n   Thumbnail: ${r.thumbnail}`;
+        if (r.snippetDocId) entry += `\n   → newspapers_get_snippet(source: "gallica", document_id: "${r.snippetDocId}")`;
         return entry;
       }).join("\n\n");
 
@@ -268,7 +268,7 @@ server.registerTool(
       const totalHits = hitsMatch ? hitsMatch[1] : "unknown";
 
       // Extract result items: title, accessory (date info), link, snippet image, and OCR text
-      const results: Array<{title: string; date: string; link: string; snippetImage: string; ocrText: string}> = [];
+      const results: Array<{title: string; date: string; link: string; snippetDocId: string; snippetCoords: string; ocrText: string}> = [];
 
       // Split HTML into result blocks (each starts with srTitle)
       const blocks = html.split(/<a\s+class="srTitle"/);
@@ -279,8 +279,8 @@ server.registerTool(
         const linkMatch = block.match(/href="(\/view\/[^"]+)"[^>]*>([^<]+)<\/a>/);
         // Extract date accessory
         const dateMatch = block.match(/<span\s+class="srTitleAccessory">([^<]+)<\/span>/);
-        // Extract first snippet image URL
-        const imgMatch = block.match(/class="snippet-image"\s+src="([^"]+)"/);
+        // Extract first snippet image URL — decompose into document_id and region coords
+        const imgMatch = block.match(/class="snippet-image"\s+src="https:\/\/api\.digitale-sammlungen\.de\/iiif\/image\/v2\/([^/]+)\/(pct:[^/]+)\/full\/0\/default\.jpg"/);
         // Extract first OCR text from snippet-highlight title attribute
         const ocrMatch = block.match(/class="snippet-highlight"[^>]*title="([^"]+)"/);
 
@@ -293,7 +293,8 @@ server.registerTool(
             link: `https://digipress.digitale-sammlungen.de${linkMatch[1]}`,
             title: linkMatch[2].trim(),
             date: dateMatch ? dateMatch[1].trim() : "",
-            snippetImage: imgMatch ? imgMatch[1] : "",
+            snippetDocId: imgMatch ? imgMatch[1] : "",
+            snippetCoords: imgMatch ? imgMatch[2] : "",
             ocrText,
           });
         }
@@ -303,7 +304,7 @@ server.registerTool(
         ? results.map((r, i) => {
           let entry = `${i + 1}. ${r.title} (${r.date})\n   ${r.link}`;
           if (r.ocrText) entry += `\n   OCR snippet: ${r.ocrText.substring(0, 300)}`;
-          if (r.snippetImage) entry += `\n   Snippet image: ${r.snippetImage}`;
+          if (r.snippetDocId) entry += `\n   → newspapers_get_snippet(source: "digipress", document_id: "${r.snippetDocId}", snippet_coords: "${r.snippetCoords}")`;
           return entry;
         }).join("\n\n")
         : "No results found.";
@@ -458,7 +459,11 @@ server.registerTool(
         const url = item.url || "";
         const imageUrl = (item.image_url || [])[0] || "";
         const newspaper = (item.partof_title || [])[0] || "";
-        return { title, date, description, url, imageUrl, newspaper };
+        // Extract IIIF document_id from image URL: https://tile.loc.gov/image-services/iiif/{id}/full/...
+        let snippetDocId = "";
+        const iiifMatch = imageUrl.match(/\/iiif\/([^/]+(?:\/[^/]+)*?)\/full\//);
+        if (iiifMatch) snippetDocId = iiifMatch[1];
+        return { title, date, description, url, imageUrl, newspaper, snippetDocId };
       });
 
       const resultText = results.map((r: any, i: number) => {
@@ -467,7 +472,7 @@ server.registerTool(
         if (r.newspaper) entry += ` — ${r.newspaper}`;
         if (r.description) entry += `\n   ${r.description}`;
         if (r.url) entry += `\n   Link: ${r.url}`;
-        if (r.imageUrl) entry += `\n   Image: ${r.imageUrl}`;
+        if (r.snippetDocId) entry += `\n   → newspapers_get_snippet(source: "chronicling_america", document_id: "${r.snippetDocId}")`;
         return entry;
       }).join("\n\n");
 
@@ -584,6 +589,74 @@ server.registerTool(
           {
             type: "text",
             text: `Error in multi-archive search: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// ========== SNIPPET IMAGE PROXY ==========
+server.registerTool(
+  "newspapers_get_snippet",
+  {
+    title: "Get Newspaper Snippet Image",
+    description: "Fetch a newspaper snippet image and return it as base64. Use with snippet coordinates from search results. Supported sources: digipress, chronicling_america, gallica, europeana.",
+    inputSchema: z.object({
+      source: z.enum(["digipress", "chronicling_america", "gallica", "europeana"])
+        .describe("The archive source (digipress, chronicling_america, gallica, europeana)"),
+      document_id: z.string()
+        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k1832545v/f1' for Gallica)"),
+      snippet_coords: z.string().optional()
+        .describe("IIIF region coordinates for the snippet crop (e.g. 'pct:0,11.5,100,3.6'). If omitted, returns the full page thumbnail."),
+    }),
+  },
+  async ({ source, document_id, snippet_coords }) => {
+    try {
+      let imageUrl: string;
+      const region = snippet_coords || "full";
+
+      switch (source) {
+        case "digipress":
+          imageUrl = `https://api.digitale-sammlungen.de/iiif/image/v2/${encodeURI(document_id)}/${region}/full/0/default.jpg`;
+          break;
+        case "chronicling_america":
+          imageUrl = `https://tile.loc.gov/image-services/iiif/${encodeURI(document_id)}/${region}/pct:25/0/default.jpg`;
+          break;
+        case "gallica":
+          imageUrl = `https://gallica.bnf.fr/iiif/ark:/12148/${encodeURI(document_id)}/${region}/full/0/default.jpg`;
+          break;
+        case "europeana":
+          // Europeana thumbnails are direct URLs; document_id is the full thumbnail URL path
+          imageUrl = `https://api.europeana.eu/thumbnail/v2/url.json?uri=${encodeURIComponent(document_id)}&type=TEXT`;
+          break;
+      }
+
+      const response = await axios.get(imageUrl, {
+        responseType: "arraybuffer",
+        headers: { "User-Agent": "newspapers-mcp/1.0" },
+        timeout: 30000,
+      });
+
+      const contentType = String(response.headers["content-type"] || "image/jpeg");
+      const mimeType = contentType.split(";")[0].trim();
+      const base64 = Buffer.from(response.data).toString("base64");
+
+      return {
+        content: [
+          {
+            type: "image",
+            data: base64,
+            mimeType,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error fetching snippet image: ${error instanceof Error ? error.message : "Unknown error"}`,
           },
         ],
       };
