@@ -167,32 +167,66 @@ server.registerTool(
 );
 
 // ========== BAVARIAN STATE LIBRARY (Bavaria) ==========
+// Uses digiPress, the newspaper portal of the Bavarian State Library
+// Full-text search across ~9 million digitised newspaper pages
 server.registerTool(
   "search_bavarian_state_library",
   {
     title: "Search Bavarian Newspaper Archives",
-    description: "Search Bavarian newspaper archives via Bavarian State Library",
+    description: "Search Bavarian historical newspaper archives via digiPress (Bavarian State Library). Full-text search across ~9 million digitised pages.",
     inputSchema: searchSchema,
   },
   async ({ query, date_from, date_to, page = 1, rows = 20 }) => {
     try {
+      const start = (page - 1) * rows;
       const params = new URLSearchParams({
         q: query,
         rows: rows.toString(),
-        page: page.toString(),
+        start: start.toString(),
       });
 
-      if (date_from || date_to) {
-        params.append("daterange", `${date_from || "*"};${date_to || "*"}`);
+      if (date_from) {
+        const [y, m, d] = date_from.split("-");
+        if (y) params.append("fromYear", y);
+        if (m) params.append("fromMonth", m);
+        if (d) params.append("fromDay", d);
+      }
+      if (date_to) {
+        const [y, m, d] = date_to.split("-");
+        if (y) params.append("untilYear", y);
+        if (m) params.append("untilMonth", m);
+        if (d) params.append("untilDay", d);
       }
 
-      const response = await axios.get(`https://www.bsb-muenchen.de/cgi-bin/sru.php?${params}`);
+      const url = `https://digipress.digitale-sammlungen.de/search/simple?${params}`;
+      const response = await axios.get(url);
+      const html: string = response.data;
+
+      // Extract total hits from page title
+      const hitsMatch = html.match(/<title>digiPress:\s*(\d+)\s*Treffer<\/title>/);
+      const totalHits = hitsMatch ? hitsMatch[1] : "unknown";
+
+      // Extract result items: title, date, link
+      const results: Array<{title: string; date: string; link: string}> = [];
+      const itemRegex = /<a\s+href="(\/view\/[^"]+)"[^>]*>\s*([^<]+)<\/a>\s*([^\n<]+)/g;
+      let match;
+      while ((match = itemRegex.exec(html)) !== null && results.length < rows) {
+        results.push({
+          link: `https://digipress.digitale-sammlungen.de${match[1]}`,
+          title: match[2].trim(),
+          date: match[3].trim(),
+        });
+      }
+
+      const resultText = results.length > 0
+        ? results.map((r, i) => `${i + 1}. ${r.title} (${r.date})\n   ${r.link}`).join("\n")
+        : "No results found.";
 
       return {
         content: [
           {
             type: "text",
-            text: `Searched Bavarian State Library for "${query}"`,
+            text: `digiPress (Bavarian State Library) — ${totalHits} hits for "${query}"\nPage ${page}, showing ${results.length} results:\n\n${resultText}`,
           },
         ],
       };
@@ -210,36 +244,25 @@ server.registerTool(
 );
 
 // ========== BRITISH LIBRARY (UK/GB) ==========
+// Uses the BL catalogue (Ex Libris Primo VE) to search for newspaper-related records.
+// Note: Digitised newspaper content is on the commercial British Newspaper Archive.
 server.registerTool(
   "search_british_library",
   {
-    title: "Search British Newspaper Archives",
-    description: "Search British newspaper archives via British Library Collections",
+    title: "Search British Library Catalogue",
+    description: "Search the British Library catalogue for newspaper-related records. Note: full digitised newspaper content is available through the British Newspaper Archive (britishnewspaperarchive.co.uk). This searches the BL's general catalogue metadata.",
     inputSchema: searchSchema,
   },
   async ({ query, date_from, date_to, page = 1, rows = 20 }) => {
     try {
-      const params = new URLSearchParams({
-        q: query,
-        format: "json",
-        rows: rows.toString(),
-        page: page.toString(),
-      });
-
-      if (date_from || date_to) {
-        params.append("daterange", `${date_from || "1700"}-${date_to || "2024"}`);
-      }
-
-      // Search specifically for newspapers
-      params.append("collection", "newspapers");
-
-      const response = await axios.get(`https://api.bl.uk/collections/search?${params}`);
+      // Use BL catalogue deep link search
+      const searchUrl = `https://catalogue.bl.uk/nde/search?vid=44BL_MAIN:BLL01_NDE&query=any,contains,${encodeURIComponent(query)}&tab=Everything&search_scope=BL_LOCAL&offset=${(page - 1) * rows}`;
 
       return {
         content: [
           {
             type: "text",
-            text: `Searched British Library for "${query}". Found results: ${JSON.stringify(response.data, null, 2).substring(0, 500)}...`,
+            text: `British Library catalogue search for "${query}":\n\nSearch URL: ${searchUrl}\n\nNote: The British Library's digitised newspaper collection is primarily accessible through the British Newspaper Archive (https://www.britishnewspaperarchive.co.uk/). The BL catalogue above provides metadata records for newspaper holdings.\n\nFor free full-text newspaper searches for British content, consider using Europeana or the Welsh Newspapers Online portal.`,
           },
         ],
       };
@@ -492,16 +515,8 @@ async function searchGallica(query: string, dateFrom?: string, dateTo?: string):
 }
 
 async function searchBritishLibrary(query: string, dateFrom?: string, dateTo?: string): Promise<string> {
-  try {
-    const params = new URLSearchParams({
-      q: query,
-      rows: "5",
-    });
-    const response = await axios.get(`https://api.bl.uk/collections/search?${params}`);
-    return "Search completed";
-  } catch (e) {
-    return "Search failed";
-  }
+  const searchUrl = `https://catalogue.bl.uk/nde/search?vid=44BL_MAIN:BLL01_NDE&query=any,contains,${encodeURIComponent(query)}&tab=Everything&search_scope=BL_LOCAL`;
+  return `BL catalogue: ${searchUrl} (digitised content at britishnewspaperarchive.co.uk)`;
 }
 
 async function searchChroniclingAmerica(query: string, dateFrom?: string, dateTo?: string): Promise<string> {
