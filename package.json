@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "description": "MCP server for searching online newspaper archives across multiple countries and regions",
   "type": "module",
+  "main": "build/index.js",
   "bin": {
     "newspapers-mcp": "./build/index.js"
   },
   "scripts": {
     "build": "tsc && chmod 755 build/index.js",
+    "gcp-build": "",
     "watch": "tsc --watch",
     "dev": "npm run build && node build/index.js",
     "test": "node --test"
