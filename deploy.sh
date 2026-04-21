@@ -8,6 +8,18 @@ PROJECT="mcp-svcs"
 REGION="europe-west1"
 FUNCTION="newspapers-mcp"
 
+# Ensure the secret exists in Secret Manager
+echo "Ensuring EUROPEANA_API_KEY secret exists..."
+if ! gcloud secrets describe EUROPEANA_API_KEY --account "$ACCOUNT" --project="$PROJECT" &>/dev/null; then
+  echo "Creating EUROPEANA_API_KEY secret..."
+  echo -n "${EUROPEANA_API_KEY:-api2demo}" | \
+    gcloud secrets create EUROPEANA_API_KEY \
+      --project="$PROJECT" \
+      --account="$ACCOUNT" \
+      --replication-policy="automatic" \
+      --data-file=-
+fi
+
 # Build TypeScript
 echo "Building TypeScript..."
 npm run build
@@ -25,6 +37,6 @@ gcloud functions deploy "$FUNCTION" \
   --trigger-http \
   --allow-unauthenticated \
   --max-instances=1 \
-  --set-env-vars="EUROPEANA_API_KEY=${EUROPEANA_API_KEY:-demo}"
+  --set-secrets="EUROPEANA_API_KEY=EUROPEANA_API_KEY:latest"
 
 echo "Done."
