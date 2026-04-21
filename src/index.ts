@@ -21,6 +21,9 @@ import {
   searchDelpherFull,
   searchTroveFull,
   searchEluxemburgensiaFull,
+  searchNorwegianFull,
+  searchDigitalNZFull,
+  searchInternetArchiveFull,
 } from "./providers/index.js";
 
 // Schema definitions for tool inputs
@@ -35,9 +38,15 @@ const searchSchema = z.object({
     "anno",
     "delpher",
     "chronicling_america",
+    "norwegian",
+    "digitalnz",
+    "internet_archive",
     "south_african",
     "trove",
     "eluxemburgensia",
+    "norwegian",
+    "digitalnz",
+    "internet_archive",
   ]).default("all").describe("Which newspaper archive to search. Use 'all' to search all archives simultaneously."),
   query: z.string().describe("Search query (keywords, names, dates)"),
   date_from: z.string().optional().describe("Start date (YYYY-MM-DD format)"),
@@ -47,13 +56,12 @@ const searchSchema = z.object({
 });
 
 function registerTools(server: McpServer) {
-
 // ========== UNIFIED NEWSPAPER SEARCH ==========
 server.registerTool(
   "search_newspapers",
   {
     title: "Search Newspaper Archives",
-    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF, full-text OCR with page-level results & IIIF images), ddb (Germany/DDB, 180K+ newspaper issues with thumbnails), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), anno (Austria/ANNO, 28M+ pages, 1600+ titles with OCR snippets & images), delpher (Netherlands/KB, 2M+ newspapers 1618–1995 with OCR), chronicling_america (USA/Library of Congress with OCR & images), trove (Australia/NLA, 25M+ articles with OCR, requires TROVE_API_KEY), eluxemburgensia (Luxembourg/BnL, full-text OCR search), south_african (links only). Use source='all' to search all simultaneously.",
+    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF), ddb (Germany/DDB), digipress (Germany/BSB), british_library (UK catalogue), anno (Austria/ANNO), delpher (Netherlands/KB), chronicling_america (USA/LoC), trove (Australia/NLA, requires TROVE_API_KEY), eluxemburgensia (Luxembourg/BnL), norwegian (Norway/nb.no), digitalnz (New Zealand/Papers Past), internet_archive (Internet Archive newspapers), south_african (links only). Use source='all' to search all simultaneously.",
     inputSchema: searchSchema,
   },
   async ({ source, query, date_from, date_to, page = 1, rows = 20 }) => {
@@ -63,12 +71,18 @@ server.registerTool(
           { name: "Europeana", fn: () => searchEuropeanaFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "Gallica", fn: () => searchGallicaFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "digiPress", fn: () => searchDigipressFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "Norwegian NL", fn: () => searchNorwegianFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "DigitalNZ", fn: () => searchDigitalNZFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "Internet Archive", fn: () => searchInternetArchiveFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "Chronicling America", fn: () => searchChroniclingAmericaFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "ANNO", fn: () => searchAnnoFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "Delpher", fn: () => searchDelpherFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "DDB", fn: () => searchDdbFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "Trove", fn: () => searchTroveFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "eLuxemburgensia", fn: () => searchEluxemburgensiaFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "Norwegian NL", fn: () => searchNorwegianFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "DigitalNZ", fn: () => searchDigitalNZFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "Internet Archive", fn: () => searchInternetArchiveFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "British Library", fn: () => searchBritishLibraryFull(query, date_from, date_to, page, rows) },
         ];
 
@@ -109,6 +123,15 @@ server.registerTool(
         case "chronicling_america":
           result = await searchChroniclingAmericaFull(query, date_from, date_to, page, rows);
           break;
+        case "norwegian":
+          result = await searchNorwegianFull(query, date_from, date_to, page, rows);
+          break;
+        case "digitalnz":
+          result = await searchDigitalNZFull(query, date_from, date_to, page, rows);
+          break;
+        case "internet_archive":
+          result = await searchInternetArchiveFull(query, date_from, date_to, page, rows);
+          break;
         case "south_african":
           result = await searchSouthAfricanFull(query, date_from, date_to, page, rows);
           break;
@@ -117,6 +140,15 @@ server.registerTool(
           break;
         case "eluxemburgensia":
           result = await searchEluxemburgensiaFull(query, date_from, date_to, page, rows);
+          break;
+        case "norwegian":
+          result = await searchNorwegianFull(query, date_from, date_to, page, rows);
+          break;
+        case "digitalnz":
+          result = await searchDigitalNZFull(query, date_from, date_to, page, rows);
+          break;
+        case "internet_archive":
+          result = await searchInternetArchiveFull(query, date_from, date_to, page, rows);
           break;
       }
 
@@ -128,7 +160,7 @@ server.registerTool(
         content: [
           {
             type: "text",
-            text: `Error searching newspapers: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error searching newspapers: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
       };
@@ -141,12 +173,12 @@ server.registerTool(
   "newspapers_get_snippet",
   {
     title: "Get Newspaper Snippet Image",
-    description: "Fetch a newspaper snippet image and return it as base64. Use with snippet coordinates from search results. Supported sources: digipress, chronicling_america, gallica, europeana, anno, delpher, ddb.",
+    description: "Fetch a newspaper snippet image and return it as base64. Use with snippet coordinates from search results. Supported sources: digipress, chronicling_america, gallica, europeana, anno, delpher, ddb, eluxemburgensia.",
     inputSchema: z.object({
-      source: z.enum(["digipress", "chronicling_america", "gallica", "europeana", "anno", "delpher", "ddb"])
-        .describe("The archive source (digipress, chronicling_america, gallica, europeana, anno, delpher, ddb)"),
+      source: z.enum(["digipress", "chronicling_america", "gallica", "europeana", "anno", "delpher", "ddb", "eluxemburgensia"])
+        .describe("The archive source (digipress, chronicling_america, gallica, europeana, anno, delpher, ddb, eluxemburgensia)"),
       document_id: z.string()
-        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k5460422k/f173' for Gallica, full imageURL for ANNO, 'ddd:...:mpeg21:p010' for Delpher, UUID for DDB)"),
+        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k5460422k/f173' for Gallica, full imageURL for ANNO, 'ddd:...:mpeg21:p010' for Delpher, UUID for DDB, 'ark:70795/.../pages/1' for eLuxemburgensia)"),
       snippet_coords: z.string().optional()
         .describe("IIIF region coordinates for the snippet crop (e.g. 'pct:0,11.5,100,3.6' for digiPress, 'x,y,w,h' pixel coords for Gallica). Not used for ANNO (imageURL already contains crop). If omitted, returns the full page."),
     }),
@@ -170,6 +202,10 @@ server.registerTool(
           break;
         case "europeana":
           imageUrl = `https://api.europeana.eu/thumbnail/v2/url.json?uri=${encodeURIComponent(document_id)}&type=TEXT`;
+        case "eluxemburgensia":
+          // IIIF image service — document_id is "ark:70795/.../pages/N", region via snippet_coords
+          imageUrl = `https://iiif.eluxemburgensia.lu/iiif/2/${encodeURIComponent(document_id)}/${region}/full/0/default.jpg`;
+          break;
           break;
         case "anno": {
           // ANNO snippet imageURLs are complete URLs from the snippet API — validate domain
@@ -187,6 +223,10 @@ server.registerTool(
         case "ddb":
           // DDB binary endpoint returns thumbnails/images by UUID
           imageUrl = `https://api.deutsche-digitale-bibliothek.de/binary/${encodeURIComponent(document_id)}`;
+          break;
+        case "eluxemburgensia":
+          // IIIF image service — document_id is "ark:70795/.../pages/N", region via snippet_coords
+          imageUrl = `https://iiif.eluxemburgensia.lu/iiif/2/${encodeURIComponent(document_id)}/${region}/full/0/default.jpg`;
           break;
       }
 

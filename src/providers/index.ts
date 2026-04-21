@@ -9,3 +9,6 @@ export { searchSouthAfricanFull } from "./south-african.js";
 export { searchDelpherFull } from "./delpher.js";
 export { searchTroveFull } from "./trove.js";
 export { searchEluxemburgensiaFull } from "./eluxemburgensia.js";
+export { searchNorwegianFull } from "./norwegian.js";
+export { searchDigitalNZFull } from "./digitalnz.js";
+export { searchInternetArchiveFull } from "./internet-archive.js";

@@ -8,17 +8,26 @@ PROJECT="mcp-svcs"
 REGION="europe-west1"
 FUNCTION="newspapers-mcp"
 
-# Ensure the secret exists in Secret Manager
-echo "Ensuring EUROPEANA_API_KEY secret exists..."
-if ! gcloud secrets describe EUROPEANA_API_KEY --account "$ACCOUNT" --project="$PROJECT" &>/dev/null; then
-  echo "Creating EUROPEANA_API_KEY secret..."
-  echo -n "${EUROPEANA_API_KEY:-api2demo}" | \
-    gcloud secrets create EUROPEANA_API_KEY \
-      --project="$PROJECT" \
-      --account="$ACCOUNT" \
-      --replication-policy="automatic" \
-      --data-file=-
-fi
+# Ensure secrets exist in Secret Manager
+for secret_name in EUROPEANA_API_KEY TROVE_API_KEY; do
+  echo "Ensuring $secret_name secret exists..."
+  if ! gcloud secrets describe "$secret_name" --account "$ACCOUNT" --project="$PROJECT" &>/dev/null; then
+    default_val=""
+    [[ "$secret_name" == "EUROPEANA_API_KEY" ]] && default_val="api2demo"
+    val="${!secret_name:-$default_val}"
+    if [[ -n "$val" ]]; then
+      echo "Creating $secret_name secret..."
+      echo -n "$val" | \
+        gcloud secrets create "$secret_name" \
+          --project="$PROJECT" \
+          --account="$ACCOUNT" \
+          --replication-policy="automatic" \
+          --data-file=-
+    else
+      echo "Skipping $secret_name (no value provided)"
+    fi
+  fi
+done
 
 # Build TypeScript
 echo "Building TypeScript..."
@@ -37,6 +46,6 @@ gcloud functions deploy "$FUNCTION" \
   --trigger-http \
   --allow-unauthenticated \
   --max-instances=1 \
-  --set-secrets="EUROPEANA_API_KEY=EUROPEANA_API_KEY:latest"
+  --set-secrets="EUROPEANA_API_KEY=EUROPEANA_API_KEY:latest,TROVE_API_KEY=TROVE_API_KEY:latest"
 
 echo "Done."
