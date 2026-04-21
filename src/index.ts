@@ -49,7 +49,7 @@ server.registerTool(
   "search_newspapers",
   {
     title: "Search Newspaper Archives",
-    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF, full-text OCR with page-level results & IIIF images), ddb (Germany/DDB), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), anno (Austria/ANNO, 28M+ pages, 1600+ titles with OCR snippets & images), delpher (Netherlands/KB, 2M+ newspapers 1618–1995 with OCR), chronicling_america (USA/Library of Congress with OCR & images), south_african. Use source='all' to search all simultaneously.",
+    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF, full-text OCR with page-level results & IIIF images), ddb (Germany/DDB, 180K+ newspaper issues with thumbnails), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), anno (Austria/ANNO, 28M+ pages, 1600+ titles with OCR snippets & images), delpher (Netherlands/KB, 2M+ newspapers 1618–1995 with OCR), chronicling_america (USA/Library of Congress with OCR & images), south_african (links only). Use source='all' to search all simultaneously.",
     inputSchema: searchSchema,
   },
   async ({ source, query, date_from, date_to, page = 1, rows = 20 }) => {
@@ -62,6 +62,7 @@ server.registerTool(
           { name: "Chronicling America", fn: () => searchChroniclingAmericaFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "ANNO", fn: () => searchAnnoFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "Delpher", fn: () => searchDelpherFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "DDB", fn: () => searchDdbFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "British Library", fn: () => searchBritishLibraryFull(query, date_from, date_to, page, rows) },
         ];
 
@@ -128,12 +129,12 @@ server.registerTool(
   "newspapers_get_snippet",
   {
     title: "Get Newspaper Snippet Image",
-    description: "Fetch a newspaper snippet image and return it as base64. Use with snippet coordinates from search results. Supported sources: digipress, chronicling_america, gallica, europeana, anno, delpher.",
+    description: "Fetch a newspaper snippet image and return it as base64. Use with snippet coordinates from search results. Supported sources: digipress, chronicling_america, gallica, europeana, anno, delpher, ddb.",
     inputSchema: z.object({
-      source: z.enum(["digipress", "chronicling_america", "gallica", "europeana", "anno", "delpher"])
-        .describe("The archive source (digipress, chronicling_america, gallica, europeana, anno, delpher)"),
+      source: z.enum(["digipress", "chronicling_america", "gallica", "europeana", "anno", "delpher", "ddb"])
+        .describe("The archive source (digipress, chronicling_america, gallica, europeana, anno, delpher, ddb)"),
       document_id: z.string()
-        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k5460422k/f173' for Gallica, full imageURL for ANNO, 'ddd:...:mpeg21:p010' for Delpher)"),
+        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k5460422k/f173' for Gallica, full imageURL for ANNO, 'ddd:...:mpeg21:p010' for Delpher, UUID for DDB)"),
       snippet_coords: z.string().optional()
         .describe("IIIF region coordinates for the snippet crop (e.g. 'pct:0,11.5,100,3.6' for digiPress, 'x,y,w,h' pixel coords for Gallica). Not used for ANNO (imageURL already contains crop). If omitted, returns the full page."),
     }),
@@ -170,6 +171,10 @@ server.registerTool(
         case "delpher":
           // KB Netherlands resolver returns JP2 page images
           imageUrl = `https://resolver.kb.nl/resolve?urn=${encodeURIComponent(document_id)}:image`;
+          break;
+        case "ddb":
+          // DDB binary endpoint returns thumbnails/images by UUID
+          imageUrl = `https://api.deutsche-digitale-bibliothek.de/binary/${encodeURIComponent(document_id)}`;
           break;
       }
 
