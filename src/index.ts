@@ -76,12 +76,10 @@ async function searchEuropeanaFull(query: string, date_from?: string, date_to?: 
 }
 
 async function searchGallicaFull(query: string, date_from?: string, date_to?: string, page = 1, rows = 20): Promise<string> {
-  let sruQuery = `(gallica all "${query}") and dc.type all "fascicule"`;
-  if (date_from || date_to) {
-    const from = date_from?.replace(/-/g, "/") || "*";
-    const to = date_to?.replace(/-/g, "/") || "*";
-    sruQuery += ` and dc.date >= "${from}" and dc.date <= "${to}"`;
-  }
+  // Full-text OCR search in newspaper issues using SRU text index + collapsing=false
+  let sruQuery = `(text all "${query}") and (dc.type all "fascicule")`;
+  if (date_from) sruQuery += ` and dc.date >= "${date_from}"`;
+  if (date_to) sruQuery += ` and dc.date <= "${date_to}"`;
 
   const params = new URLSearchParams({
     operation: "searchRetrieve",
@@ -89,7 +87,7 @@ async function searchGallicaFull(query: string, date_from?: string, date_to?: st
     query: sruQuery,
     maximumRecords: rows.toString(),
     startRecord: ((page - 1) * rows + 1).toString(),
-    recordSchema: "oai_dc",
+    collapsing: "false",
   });
 
   const response = await axios.get(`https://gallica.bnf.fr/SRU?${params}`, {
@@ -100,36 +98,80 @@ async function searchGallicaFull(query: string, date_from?: string, date_to?: st
   const totalMatch = xml.match(/<srw:numberOfRecords>(\d+)<\/srw:numberOfRecords>/);
   const totalResults = totalMatch ? totalMatch[1] : "unknown";
 
-  const results: Array<{title: string; description: string; date: string; link: string; snippetDocId: string}> = [];
+  // Parse SRU results to get ark IDs and metadata
+  const issues: Array<{title: string; date: string; ark: string; link: string}> = [];
   const recordRegex = /<srw:record>([\s\S]*?)<\/srw:record>/g;
   let match;
-  while ((match = recordRegex.exec(xml)) !== null && results.length < rows) {
+  while ((match = recordRegex.exec(xml)) !== null && issues.length < rows) {
     const rec = match[1];
     const titleMatch = rec.match(/<dc:title>([^<]+)<\/dc:title>/);
     const dateMatch = rec.match(/<dc:date>([^<]+)<\/dc:date>/);
-    const descMatch = rec.match(/<dc:description>([^<]+)<\/dc:description>/);
-    const linkMatch = rec.match(/<link>([^<]+)<\/link>/);
-    const uriMatch = rec.match(/<uri>([^<]+)<\/uri>/);
+    const idMatch = rec.match(/<dc:identifier>https?:\/\/gallica\.bnf\.fr\/ark:\/12148\/([^<]+)<\/dc:identifier>/);
 
-    results.push({
-      title: titleMatch ? titleMatch[1] : "Untitled",
-      date: dateMatch ? dateMatch[1] : "",
-      description: descMatch ? descMatch[1] : "",
-      link: linkMatch ? linkMatch[1] : "",
-      snippetDocId: uriMatch ? `${uriMatch[1]}/f1` : "",
-    });
+    if (idMatch) {
+      issues.push({
+        title: titleMatch ? titleMatch[1] : "Untitled",
+        date: dateMatch ? dateMatch[1] : "",
+        ark: idMatch[1],
+        link: `https://gallica.bnf.fr/ark:/12148/${idMatch[1]}`,
+      });
+    }
   }
 
-  const resultText = results.map((r, i) => {
-    let entry = `${i + 1}. ${r.title}`;
-    if (r.date) entry += ` (${r.date})`;
-    if (r.description) entry += `\n   ${r.description}`;
-    if (r.link) entry += `\n   Link: ${r.link}`;
-    if (r.snippetDocId) entry += `\n   → newspapers_get_snippet(source: "gallica", document_id: "${r.snippetDocId}")`;
-    return entry;
-  }).join("\n\n");
+  // ContentSearch on top results to get page-level OCR text excerpts
+  const maxContentSearches = Math.min(issues.length, 5);
+  const enrichedResults: string[] = [];
 
-  return `Gallica (BnF) — ${totalResults} results for "${query}"\nPage ${page}, showing ${results.length} results:\n\n${resultText || "No results found."}`;
+  for (let i = 0; i < issues.length; i++) {
+    const issue = issues[i];
+    let entry = `${i + 1}. ${issue.title}`;
+    if (issue.date) entry += ` (${issue.date})`;
+    entry += `\n   Link: ${issue.link}`;
+
+    if (i < maxContentSearches) {
+      try {
+        const csResponse = await axios.get(`https://gallica.bnf.fr/services/ContentSearch`, {
+          params: { ark: issue.ark, query },
+          headers: { "User-Agent": "newspapers-mcp/1.0" },
+          timeout: 10000,
+        });
+        const csXml: string = csResponse.data;
+
+        const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+        let itemMatch;
+        let pageCount = 0;
+        while ((itemMatch = itemRegex.exec(csXml)) !== null && pageCount < 3) {
+          const item = itemMatch[1];
+          const pidMatch = item.match(/<p_id>PAG_(\d+)<\/p_id>/);
+          const contentMatch = item.match(/<content>([\s\S]*?)<\/content>/);
+
+          if (pidMatch) {
+            const pageNum = pidMatch[1];
+            let ocrText = "";
+            if (contentMatch && contentMatch[1]) {
+              ocrText = contentMatch[1]
+                .replace(/&lt;span class='highlight'&gt;/g, "**")
+                .replace(/&lt;\/span&gt;/g, "**")
+                .replace(/&amp;/g, "&")
+                .replace(/&quot;/g, '"')
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">");
+            }
+
+            if (ocrText) entry += `\n   Page ${pageNum}: ${ocrText.substring(0, 300)}`;
+            entry += `\n   → newspapers_get_snippet(source: "gallica", document_id: "${issue.ark}/f${pageNum}")`;
+            pageCount++;
+          }
+        }
+      } catch {
+        // ContentSearch failed, show basic result without OCR excerpts
+      }
+    }
+
+    enrichedResults.push(entry);
+  }
+
+  return `Gallica (BnF) — ${totalResults} results for "${query}" (full-text OCR search in newspapers)\nPage ${page}, showing ${issues.length} results:\n\n${enrichedResults.join("\n\n") || "No results found."}`;
 }
 
 async function searchDdbFull(query: string, date_from?: string, date_to?: string, page = 1, rows = 20): Promise<string> {
@@ -310,7 +352,7 @@ server.registerTool(
   "search_newspapers",
   {
     title: "Search Newspaper Archives",
-    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF), ddb (Germany/DDB), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), austrian (Austria/Austro-Hungarian), chronicling_america (USA/Library of Congress with OCR & images), south_african. Use source='all' to search all simultaneously.",
+    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF, full-text OCR search with page-level results & IIIF images), ddb (Germany/DDB), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), austrian (Austria/Austro-Hungarian), chronicling_america (USA/Library of Congress with OCR & images), south_african. Use source='all' to search all simultaneously.",
     inputSchema: searchSchema,
   },
   async ({ source, query, date_from, date_to, page = 1, rows = 20 }) => {
@@ -393,9 +435,9 @@ server.registerTool(
       source: z.enum(["digipress", "chronicling_america", "gallica", "europeana"])
         .describe("The archive source (digipress, chronicling_america, gallica, europeana)"),
       document_id: z.string()
-        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k1832545v/f1' for Gallica)"),
+        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k5460422k/f173' for Gallica)"),
       snippet_coords: z.string().optional()
-        .describe("IIIF region coordinates for the snippet crop (e.g. 'pct:0,11.5,100,3.6'). If omitted, returns the full page thumbnail."),
+        .describe("IIIF region coordinates for the snippet crop (e.g. 'pct:0,11.5,100,3.6' for digiPress, 'x,y,w,h' pixel coords for Gallica). If omitted, returns the full page."),
     }),
   },
   async ({ source, document_id, snippet_coords }) => {
@@ -411,7 +453,9 @@ server.registerTool(
           imageUrl = `https://tile.loc.gov/image-services/iiif/${encodeURI(document_id)}/${region}/pct:25/0/default.jpg`;
           break;
         case "gallica":
-          imageUrl = `https://gallica.bnf.fr/iiif/ark:/12148/${encodeURI(document_id)}/${region}/full/0/default.jpg`;
+          // Use ,1000 max height for full pages, full size for cropped regions
+          const gallicaSize = snippet_coords ? "full" : ",1000";
+          imageUrl = `https://gallica.bnf.fr/iiif/ark:/12148/${encodeURI(document_id)}/${region}/${gallicaSize}/0/default.jpg`;
           break;
         case "europeana":
           imageUrl = `https://api.europeana.eu/thumbnail/v2/url.json?uri=${encodeURIComponent(document_id)}&type=TEXT`;
