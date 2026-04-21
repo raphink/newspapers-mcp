@@ -21,6 +21,7 @@ export async function searchDelpherFull(query: string, date_from?: string, date_
 
   const response = await axios.get(`https://jsru.kb.nl/sru/sru?${params}`, {
     headers: { "User-Agent": "newspapers-mcp/1.0" },
+    timeout: 15000,
   });
   const xml: string = response.data;
 
