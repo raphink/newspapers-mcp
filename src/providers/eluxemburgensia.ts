@@ -29,7 +29,7 @@ export async function searchEluxemburgensiaFull(query: string, date_from?: strin
     const pid = art.pid || "";
     const articleId = art.article || "";
     const pageId = art.begin || "";
-    const viewerUrl = pid ? `https://viewer.eluxemburgensia.lu/ark:/${pid}` : "";
+    const viewerUrl = pid ? `https://viewer.eluxemburgensia.lu/ark:${pid}/pages/1` : "";
 
     // Build snippet coordinates from wordCoordinateSnippets
     const snippets = art.wordCoordinateSnippets || [];
