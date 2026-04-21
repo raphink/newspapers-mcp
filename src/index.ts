@@ -19,7 +19,7 @@ const searchSchema = z.object({
     "ddb",
     "digipress",
     "british_library",
-    "austrian",
+    "anno",
     "chronicling_america",
     "south_african",
   ]).default("all").describe("Which newspaper archive to search. Use 'all' to search all archives simultaneously."),
@@ -261,19 +261,82 @@ async function searchBritishLibraryFull(query: string, date_from?: string, date_
   return `British Library catalogue search for "${query}":\n\nSearch URL: ${searchUrl}\n\nNote: The British Library's digitised newspaper collection is primarily accessible through the British Newspaper Archive (https://www.britishnewspaperarchive.co.uk/). The BL catalogue above provides metadata records for newspaper holdings.`;
 }
 
-async function searchAustrianFull(query: string, date_from?: string, date_to?: string, page = 1, rows = 20): Promise<string> {
+async function searchAnnoFull(query: string, date_from?: string, date_to?: string, page = 1, rows = 20): Promise<string> {
+  const from = (page - 1) * rows + 1;
   const params = new URLSearchParams({
-    query: query,
-    rows: rows.toString(),
-    start: ((page - 1) * rows).toString(),
+    query,
+    from: from.toString(),
+    facets: "false",
   });
 
   if (date_from || date_to) {
-    params.append("filter", `date:[${date_from || "1600"} TO ${date_to || "1950"}]`);
+    const yearFrom = date_from ? date_from.substring(0, 4) : "1689";
+    const yearTo = date_to ? date_to.substring(0, 4) : "2025";
+    params.append("selectedFilters", `date:[${yearFrom} TO ${yearTo}]`);
   }
 
-  await axios.get(`https://www.onb.ac.at/api/search/newspapers?${params}`);
-  return `Austrian Newspaper Archives — searched for "${query}"`;
+  const response = await axios.get(`https://anno.onb.ac.at/anno-suche/rest/search/simple?${params}`, {
+    headers: { "User-Agent": "newspapers-mcp/1.0", "Accept": "application/json" },
+  });
+  const data = response.data;
+  const totalHits = data.totalHits || 0;
+  const documents = data.documents || [];
+
+  // Enrich top results with OCR snippets
+  const maxSnippetFetches = Math.min(documents.length, 5);
+  const enrichedResults: string[] = [];
+
+  for (let i = 0; i < documents.length; i++) {
+    const doc = documents[i];
+    const docId = doc.docId || "";
+    const title = doc.displayTitle || "Untitled";
+    const date = doc.uid?.annoDate?.date || (doc.uid?.year ? String(doc.uid.year) : "");
+    const places = (doc.places || []).join(", ");
+    const type = doc.type || "";
+    const hitsInDoc = doc.totalHitsInDoc || 0;
+    const openUrl = doc.openUrl || "";
+
+    let entry = `${i + 1}. ${title}`;
+    if (date) entry += ` (${date})`;
+    if (places) entry += ` — ${places}`;
+    if (type) entry += ` [${type}]`;
+    entry += ` (${hitsInDoc} hits)`;
+    if (openUrl) entry += `\n   Link: ${openUrl}`;
+
+    if (i < maxSnippetFetches && docId) {
+      try {
+        const snippetResp = await axios.get(`https://anno.onb.ac.at/anno-suche/rest/search/snippet`, {
+          params: { documentId: docId, query },
+          headers: { "User-Agent": "newspapers-mcp/1.0", "Accept": "application/json" },
+          timeout: 10000,
+        });
+        const snippetData = snippetResp.data;
+        const snippetPages = snippetData.snippetPages || [];
+
+        for (let sp = 0; sp < Math.min(snippetPages.length, 2); sp++) {
+          const page = snippetPages[sp];
+          const pageLabel = page.pageLabel || page.page;
+          const snippets = page.snippets || [];
+          for (let s = 0; s < Math.min(snippets.length, 1); s++) {
+            const snippet = snippets[s];
+            let text = snippet.text || "";
+            text = text.replace(/<span class="snp_txt_hl">/g, "**").replace(/<\/span>/g, "**")
+              .replace(/<br\/>/g, " ").replace(/&amp;/g, "&").replace(/&ouml;/g, "ö")
+              .replace(/&auml;/g, "ä").replace(/&uuml;/g, "ü").replace(/&szlig;/g, "ß")
+              .replace(/&#\d+;/g, "").replace(/&apos;/g, "'");
+            if (text) entry += `\n   Page ${pageLabel}: ${text.substring(0, 300)}`;
+            if (snippet.imageURL) entry += `\n   → newspapers_get_snippet(source: "anno", document_id: "${snippet.imageURL}")`;
+          }
+        }
+      } catch {
+        // Snippet fetch failed, show basic result
+      }
+    }
+
+    enrichedResults.push(entry);
+  }
+
+  return `ANNO (Austrian Newspapers Online) — ${totalHits} results for "${query}" (28M+ pages, 1600+ titles)\nPage ${page}, showing ${documents.length} results:\n\n${enrichedResults.join("\n\n") || "No results found."}`;
 }
 
 async function searchChroniclingAmericaFull(query: string, date_from?: string, date_to?: string, page = 1, rows = 20): Promise<string> {
@@ -352,7 +415,7 @@ server.registerTool(
   "search_newspapers",
   {
     title: "Search Newspaper Archives",
-    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF, full-text OCR search with page-level results & IIIF images), ddb (Germany/DDB), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), austrian (Austria/Austro-Hungarian), chronicling_america (USA/Library of Congress with OCR & images), south_african. Use source='all' to search all simultaneously.",
+    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF, full-text OCR with page-level results & IIIF images), ddb (Germany/DDB), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), anno (Austria/ANNO, 28M+ pages, 1600+ titles with OCR snippets & images), chronicling_america (USA/Library of Congress with OCR & images), south_african. Use source='all' to search all simultaneously.",
     inputSchema: searchSchema,
   },
   async ({ source, query, date_from, date_to, page = 1, rows = 20 }) => {
@@ -363,6 +426,7 @@ server.registerTool(
           { name: "Gallica", fn: () => searchGallicaFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "digiPress", fn: () => searchDigipressFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "Chronicling America", fn: () => searchChroniclingAmericaFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "ANNO", fn: () => searchAnnoFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "British Library", fn: () => searchBritishLibraryFull(query, date_from, date_to, page, rows) },
         ];
 
@@ -398,8 +462,8 @@ server.registerTool(
         case "british_library":
           result = await searchBritishLibraryFull(query, date_from, date_to, page, rows);
           break;
-        case "austrian":
-          result = await searchAustrianFull(query, date_from, date_to, page, rows);
+        case "anno":
+          result = await searchAnnoFull(query, date_from, date_to, page, rows);
           break;
         case "chronicling_america":
           result = await searchChroniclingAmericaFull(query, date_from, date_to, page, rows);
@@ -430,14 +494,14 @@ server.registerTool(
   "newspapers_get_snippet",
   {
     title: "Get Newspaper Snippet Image",
-    description: "Fetch a newspaper snippet image and return it as base64. Use with snippet coordinates from search results. Supported sources: digipress, chronicling_america, gallica, europeana.",
+    description: "Fetch a newspaper snippet image and return it as base64. Use with snippet coordinates from search results. Supported sources: digipress, chronicling_america, gallica, europeana, anno.",
     inputSchema: z.object({
-      source: z.enum(["digipress", "chronicling_america", "gallica", "europeana"])
-        .describe("The archive source (digipress, chronicling_america, gallica, europeana)"),
+      source: z.enum(["digipress", "chronicling_america", "gallica", "europeana", "anno"])
+        .describe("The archive source (digipress, chronicling_america, gallica, europeana, anno)"),
       document_id: z.string()
-        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k5460422k/f173' for Gallica)"),
+        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k5460422k/f173' for Gallica, full imageURL for ANNO)"),
       snippet_coords: z.string().optional()
-        .describe("IIIF region coordinates for the snippet crop (e.g. 'pct:0,11.5,100,3.6' for digiPress, 'x,y,w,h' pixel coords for Gallica). If omitted, returns the full page."),
+        .describe("IIIF region coordinates for the snippet crop (e.g. 'pct:0,11.5,100,3.6' for digiPress, 'x,y,w,h' pixel coords for Gallica). Not used for ANNO (imageURL already contains crop). If omitted, returns the full page."),
     }),
   },
   async ({ source, document_id, snippet_coords }) => {
@@ -459,6 +523,10 @@ server.registerTool(
           break;
         case "europeana":
           imageUrl = `https://api.europeana.eu/thumbnail/v2/url.json?uri=${encodeURIComponent(document_id)}&type=TEXT`;
+          break;
+        case "anno":
+          // ANNO snippet imageURLs are complete URLs from the snippet API
+          imageUrl = document_id;
           break;
       }
 
