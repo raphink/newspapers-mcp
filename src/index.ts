@@ -18,6 +18,7 @@ import {
   searchAnnoFull,
   searchChroniclingAmericaFull,
   searchSouthAfricanFull,
+  searchDelpherFull,
 } from "./providers/index.js";
 
 // Schema definitions for tool inputs
@@ -30,6 +31,7 @@ const searchSchema = z.object({
     "digipress",
     "british_library",
     "anno",
+    "delpher",
     "chronicling_america",
     "south_african",
   ]).default("all").describe("Which newspaper archive to search. Use 'all' to search all archives simultaneously."),
@@ -47,7 +49,7 @@ server.registerTool(
   "search_newspapers",
   {
     title: "Search Newspaper Archives",
-    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF, full-text OCR with page-level results & IIIF images), ddb (Germany/DDB), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), anno (Austria/ANNO, 28M+ pages, 1600+ titles with OCR snippets & images), chronicling_america (USA/Library of Congress with OCR & images), south_african. Use source='all' to search all simultaneously.",
+    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF, full-text OCR with page-level results & IIIF images), ddb (Germany/DDB), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), anno (Austria/ANNO, 28M+ pages, 1600+ titles with OCR snippets & images), delpher (Netherlands/KB, 2M+ newspapers 1618–1995 with OCR), chronicling_america (USA/Library of Congress with OCR & images), south_african. Use source='all' to search all simultaneously.",
     inputSchema: searchSchema,
   },
   async ({ source, query, date_from, date_to, page = 1, rows = 20 }) => {
@@ -59,6 +61,7 @@ server.registerTool(
           { name: "digiPress", fn: () => searchDigipressFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "Chronicling America", fn: () => searchChroniclingAmericaFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "ANNO", fn: () => searchAnnoFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "Delpher", fn: () => searchDelpherFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "British Library", fn: () => searchBritishLibraryFull(query, date_from, date_to, page, rows) },
         ];
 
@@ -97,6 +100,9 @@ server.registerTool(
         case "anno":
           result = await searchAnnoFull(query, date_from, date_to, page, rows);
           break;
+        case "delpher":
+          result = await searchDelpherFull(query, date_from, date_to, page, rows);
+          break;
         case "chronicling_america":
           result = await searchChroniclingAmericaFull(query, date_from, date_to, page, rows);
           break;
@@ -126,12 +132,12 @@ server.registerTool(
   "newspapers_get_snippet",
   {
     title: "Get Newspaper Snippet Image",
-    description: "Fetch a newspaper snippet image and return it as base64. Use with snippet coordinates from search results. Supported sources: digipress, chronicling_america, gallica, europeana, anno.",
+    description: "Fetch a newspaper snippet image and return it as base64. Use with snippet coordinates from search results. Supported sources: digipress, chronicling_america, gallica, europeana, anno, delpher.",
     inputSchema: z.object({
-      source: z.enum(["digipress", "chronicling_america", "gallica", "europeana", "anno"])
-        .describe("The archive source (digipress, chronicling_america, gallica, europeana, anno)"),
+      source: z.enum(["digipress", "chronicling_america", "gallica", "europeana", "anno", "delpher"])
+        .describe("The archive source (digipress, chronicling_america, gallica, europeana, anno, delpher)"),
       document_id: z.string()
-        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k5460422k/f173' for Gallica, full imageURL for ANNO)"),
+        .describe("Document/page identifier from the archive (e.g. 'bsb10001591_00035' for digiPress, 'service:ndnp:...:0003' for Chronicling America, 'bpt6k5460422k/f173' for Gallica, full imageURL for ANNO, 'ddd:...:mpeg21:p010' for Delpher)"),
       snippet_coords: z.string().optional()
         .describe("IIIF region coordinates for the snippet crop (e.g. 'pct:0,11.5,100,3.6' for digiPress, 'x,y,w,h' pixel coords for Gallica). Not used for ANNO (imageURL already contains crop). If omitted, returns the full page."),
     }),
@@ -159,6 +165,10 @@ server.registerTool(
         case "anno":
           // ANNO snippet imageURLs are complete URLs from the snippet API
           imageUrl = document_id;
+          break;
+        case "delpher":
+          // KB Netherlands resolver returns JP2 page images
+          imageUrl = `https://resolver.kb.nl/resolve?urn=${encodeURIComponent(document_id)}:image`;
           break;
       }
 

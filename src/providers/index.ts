@@ -6,3 +6,4 @@ export { searchBritishLibraryFull } from "./british-library.js";
 export { searchAnnoFull } from "./anno.js";
 export { searchChroniclingAmericaFull } from "./chronicling-america.js";
 export { searchSouthAfricanFull } from "./south-african.js";
+export { searchDelpherFull } from "./delpher.js";
