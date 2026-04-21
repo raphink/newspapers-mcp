@@ -31,7 +31,10 @@ export async function searchDdbFull(query: string, date_from?: string, date_to?:
     const provider = doc.provider || "";
     const places = (doc.place_of_distribution || []).join(", ");
     const id = doc.id || "";
-    const link = `https://www.deutsche-digitale-bibliothek.de/newspaper/item/${id}`;
+    const pagename = doc.pagename || "";
+    const itemId = pagename ? id.replace(`-${pagename}`, "") : id;
+    const pageNum = doc.pagenumber || 1;
+    const link = `https://www.deutsche-digitale-bibliothek.de/newspaper/item/${itemId}?query=${encodeURIComponent(query)}&issuepage=${pageNum}`;
     const thumbnailId = doc.thumbnail || "";
 
     let entry = `${i + 1}. ${title}`;
