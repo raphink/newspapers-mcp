@@ -22,7 +22,9 @@ export async function searchDigipressFull(query: string, date_from?: string, dat
   }
 
   const url = `https://digipress.digitale-sammlungen.de/search/simple?${params}`;
-  const response = await axios.get(url);
+  const response = await axios.get(url, {
+    timeout: 15000,
+  });
   const html: string = response.data;
 
   const hitsMatch = html.match(/<title>digiPress:\s*(\d+)\s*Treffer<\/title>/);

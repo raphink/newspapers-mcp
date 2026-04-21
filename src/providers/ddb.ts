@@ -13,6 +13,8 @@ export async function searchDdbFull(query: string, date_from?: string, date_to?:
   }
   params.append("filter", "type:Periodical");
 
-  await axios.get(`https://www.deutsche-digitale-bibliothek.de/search?${params.toString()}`);
+  await axios.get(`https://www.deutsche-digitale-bibliothek.de/search?${params.toString()}`, {
+    timeout: 15000,
+  });
   return `Deutsche Digitale Bibliothek — searched for "${query}"`;
 }

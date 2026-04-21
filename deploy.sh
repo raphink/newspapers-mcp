@@ -3,7 +3,7 @@
 # Usage: ./deploy.sh
 set -euo pipefail
 
-ACCOUNT="raphink@gmail.com"
+ACCOUNT="${GCLOUD_ACCOUNT:-$(gcloud config get-value account 2>/dev/null)}"
 PROJECT="mcp-svcs"
 REGION="europe-west1"
 FUNCTION="newspapers-mcp"

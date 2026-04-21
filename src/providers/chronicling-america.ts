@@ -23,7 +23,9 @@ export async function searchChroniclingAmericaFull(query: string, date_from?: st
     }
   }
 
-  const response = await axios.get(`https://www.loc.gov/collections/chronicling-america/?${params}`);
+  const response = await axios.get(`https://www.loc.gov/collections/chronicling-america/?${params}`, {
+    timeout: 15000,
+  });
   const data = response.data;
   const totalResults = data.pagination?.total || 0;
   const items = data.results || [];

@@ -11,6 +11,8 @@ export async function searchSouthAfricanFull(query: string, date_from?: string, 
     params.append("fq", `published:[${date_from || "1800"}T00:00:00Z TO ${date_to || "2024"}T23:59:59Z]`);
   }
 
-  await axios.get(`https://digital.lib.sun.ac.za/search/newspapers?${params}`);
+  await axios.get(`https://digital.lib.sun.ac.za/search/newspapers?${params}`, {
+    timeout: 15000,
+  });
   return `South African archives — searched for "${query}"`;
 }

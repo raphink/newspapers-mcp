@@ -16,7 +16,9 @@ export async function searchEuropeanaFull(query: string, date_from?: string, dat
     params.append("qf", `issued:[${dateFacet}]`);
   }
 
-  const response = await axios.get(`https://api.europeana.eu/record/v2/search.json?${params}`);
+  const response = await axios.get(`https://api.europeana.eu/record/v2/search.json?${params}`, {
+    timeout: 15000,
+  });
   const totalResults = response.data.totalResults || 0;
   const items = response.data.items || [];
 

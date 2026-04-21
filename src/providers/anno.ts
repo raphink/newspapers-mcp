@@ -16,6 +16,7 @@ export async function searchAnnoFull(query: string, date_from?: string, date_to?
 
   const response = await axios.get(`https://anno.onb.ac.at/anno-suche/rest/search/simple?${params}`, {
     headers: { "User-Agent": "newspapers-mcp/1.0", "Accept": "application/json" },
+    timeout: 15000,
   });
   const data = response.data;
   const totalHits = data.totalHits || 0;

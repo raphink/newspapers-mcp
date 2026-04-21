@@ -65,14 +65,10 @@ server.registerTool(
           { name: "British Library", fn: () => searchBritishLibraryFull(query, date_from, date_to, page, rows) },
         ];
 
-        const sections: string[] = [];
-        for (const archive of archives) {
-          try {
-            sections.push(await archive.fn());
-          } catch (e) {
-            sections.push(`${archive.name}: Error — ${e instanceof Error ? e.message : "Unknown error"}`);
-          }
-        }
+        const settled = await Promise.allSettled(archives.map(a => a.fn()));
+        const sections = settled.map((r, i) =>
+          r.status === "fulfilled" ? r.value : `${archives[i].name}: Error — ${r.reason instanceof Error ? r.reason.message : "Unknown error"}`
+        );
 
         return {
           content: [{ type: "text", text: sections.join("\n\n---\n\n") }],
@@ -162,10 +158,15 @@ server.registerTool(
         case "europeana":
           imageUrl = `https://api.europeana.eu/thumbnail/v2/url.json?uri=${encodeURIComponent(document_id)}&type=TEXT`;
           break;
-        case "anno":
-          // ANNO snippet imageURLs are complete URLs from the snippet API
+        case "anno": {
+          // ANNO snippet imageURLs are complete URLs from the snippet API — validate domain
+          const annoUrl = new URL(document_id);
+          if (annoUrl.hostname !== "anno.onb.ac.at") {
+            throw new Error("Invalid ANNO image URL: must be from anno.onb.ac.at");
+          }
           imageUrl = document_id;
           break;
+        }
         case "delpher":
           // KB Netherlands resolver returns JP2 page images
           imageUrl = `https://resolver.kb.nl/resolve?urn=${encodeURIComponent(document_id)}:image`;
