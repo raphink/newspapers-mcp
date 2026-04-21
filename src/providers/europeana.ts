@@ -3,12 +3,12 @@ import axios from "axios";
 export async function searchEuropeanaFull(query: string, date_from?: string, date_to?: string, page = 1, rows = 20): Promise<string> {
   const apiKey = process.env.EUROPEANA_API_KEY || "api2demo";
   const params = new URLSearchParams({
-    query: `"${query}" AND (type:"TEXT")`,
+    query: query,
     profile: "rich",
     rows: rows.toString(),
     start: ((page - 1) * rows + 1).toString(),
     wskey: apiKey,
-    qf: 'contentTier:"*"',
+    qf: "TYPE:TEXT",
   });
 
   if (date_from || date_to) {
