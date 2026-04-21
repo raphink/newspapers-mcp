@@ -162,8 +162,8 @@ server.registerTool(
         case "anno": {
           // ANNO snippet imageURLs are complete URLs from the snippet API — validate domain
           const annoUrl = new URL(document_id);
-          if (annoUrl.hostname !== "anno.onb.ac.at") {
-            throw new Error("Invalid ANNO image URL: must be from anno.onb.ac.at");
+          if (annoUrl.hostname !== "anno.onb.ac.at" && annoUrl.hostname !== "digital.onb.ac.at") {
+            throw new Error("Invalid ANNO image URL: must be from anno.onb.ac.at or digital.onb.ac.at");
           }
           imageUrl = document_id;
           break;
