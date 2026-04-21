@@ -19,6 +19,8 @@ import {
   searchChroniclingAmericaFull,
   searchSouthAfricanFull,
   searchDelpherFull,
+  searchTroveFull,
+  searchEluxemburgensiaFull,
 } from "./providers/index.js";
 
 // Schema definitions for tool inputs
@@ -34,6 +36,8 @@ const searchSchema = z.object({
     "delpher",
     "chronicling_america",
     "south_african",
+    "trove",
+    "eluxemburgensia",
   ]).default("all").describe("Which newspaper archive to search. Use 'all' to search all archives simultaneously."),
   query: z.string().describe("Search query (keywords, names, dates)"),
   date_from: z.string().optional().describe("Start date (YYYY-MM-DD format)"),
@@ -49,7 +53,7 @@ server.registerTool(
   "search_newspapers",
   {
     title: "Search Newspaper Archives",
-    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF, full-text OCR with page-level results & IIIF images), ddb (Germany/DDB, 180K+ newspaper issues with thumbnails), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), anno (Austria/ANNO, 28M+ pages, 1600+ titles with OCR snippets & images), delpher (Netherlands/KB, 2M+ newspapers 1618–1995 with OCR), chronicling_america (USA/Library of Congress with OCR & images), south_african (links only). Use source='all' to search all simultaneously.",
+    description: "Search historical newspaper archives across multiple countries. Sources: europeana (Europe-wide), gallica (France/BnF, full-text OCR with page-level results & IIIF images), ddb (Germany/DDB, 180K+ newspaper issues with thumbnails), digipress (Germany/BSB, ~866 titles with OCR snippets & IIIF images), british_library (UK catalogue), anno (Austria/ANNO, 28M+ pages, 1600+ titles with OCR snippets & images), delpher (Netherlands/KB, 2M+ newspapers 1618–1995 with OCR), chronicling_america (USA/Library of Congress with OCR & images), trove (Australia/NLA, 25M+ articles with OCR, requires TROVE_API_KEY), eluxemburgensia (Luxembourg/BnL, full-text OCR search), south_african (links only). Use source='all' to search all simultaneously.",
     inputSchema: searchSchema,
   },
   async ({ source, query, date_from, date_to, page = 1, rows = 20 }) => {
@@ -63,6 +67,8 @@ server.registerTool(
           { name: "ANNO", fn: () => searchAnnoFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "Delpher", fn: () => searchDelpherFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "DDB", fn: () => searchDdbFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "Trove", fn: () => searchTroveFull(query, date_from, date_to, page, Math.min(rows, 5)) },
+          { name: "eLuxemburgensia", fn: () => searchEluxemburgensiaFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "British Library", fn: () => searchBritishLibraryFull(query, date_from, date_to, page, rows) },
         ];
 
@@ -105,6 +111,12 @@ server.registerTool(
           break;
         case "south_african":
           result = await searchSouthAfricanFull(query, date_from, date_to, page, rows);
+          break;
+        case "trove":
+          result = await searchTroveFull(query, date_from, date_to, page, rows);
+          break;
+        case "eluxemburgensia":
+          result = await searchEluxemburgensiaFull(query, date_from, date_to, page, rows);
           break;
       }
 

@@ -7,3 +7,5 @@ export { searchAnnoFull } from "./anno.js";
 export { searchChroniclingAmericaFull } from "./chronicling-america.js";
 export { searchSouthAfricanFull } from "./south-african.js";
 export { searchDelpherFull } from "./delpher.js";
+export { searchTroveFull } from "./trove.js";
+export { searchEluxemburgensiaFull } from "./eluxemburgensia.js";
