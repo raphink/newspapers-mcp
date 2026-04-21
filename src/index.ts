@@ -80,9 +80,6 @@ server.registerTool(
           { name: "DDB", fn: () => searchDdbFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "Trove", fn: () => searchTroveFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "eLuxemburgensia", fn: () => searchEluxemburgensiaFull(query, date_from, date_to, page, Math.min(rows, 5)) },
-          { name: "Norwegian NL", fn: () => searchNorwegianFull(query, date_from, date_to, page, Math.min(rows, 5)) },
-          { name: "DigitalNZ", fn: () => searchDigitalNZFull(query, date_from, date_to, page, Math.min(rows, 5)) },
-          { name: "Internet Archive", fn: () => searchInternetArchiveFull(query, date_from, date_to, page, Math.min(rows, 5)) },
           { name: "British Library", fn: () => searchBritishLibraryFull(query, date_from, date_to, page, rows) },
         ];
 

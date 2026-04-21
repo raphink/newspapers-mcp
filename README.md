@@ -4,27 +4,22 @@ An MCP (Model Context Protocol) server for searching online newspaper archives a
 
 ## Supported Archives
 
-### Europe
-- **Europeana Collections** - European digital library with newspapers from multiple countries
-
-### France
-- **Gallica** - Bibliothèque Nationale de France (French National Library)
-
-### Germany & Bavaria
-- **Deutsche Digitale Bibliothek** - German Digital Library (nationwide collection)
-- **Bavarian State Library** - Bavarian newspaper archives including regional collections
-
-### United Kingdom
-- **British Library Collections** - UK and British newspaper archives
-
-### Austria
-- **Austrian National Library** - Austrian newspaper archives including historical Austro-Hungarian Empire newspapers
-
-### United States
-- **Chronicling America** - Library of Congress American newspaper collection
-
-### South Africa
-- **South African Digital Collections** - South African newspaper archives
+| Archive | Region | Source key | Full-text search | OCR text | Snippet images | API key |
+|---|---|---|---|---|---|---|
+| Europeana Collections | Europe (multi-country) | `europeana` | ✅ | ✅ | ✅ | Optional ([get key](https://pro.europeana.eu/pages/get-api)) |
+| Gallica (BnF) | France | `gallica` | ✅ | ✅ | ✅ | None |
+| Deutsche Digitale Bibliothek | Germany | `ddb` | ✅ | — | ✅ | None |
+| digiPress (BSB) | Germany / Bavaria | `digipress` | ✅ | ✅ | ✅ | None |
+| ANNO (Austrian NL) | Austria / Austro-Hungarian Empire | `anno` | ✅ | ✅ | ✅ | None |
+| Delpher (KB) | Netherlands | `delpher` | ✅ | ✅ | ✅ | None |
+| Chronicling America (LoC) | United States | `chronicling_america` | ✅ | ✅ | ✅ | None |
+| eLuxemburgensia (BnL) | Luxembourg | `eluxemburgensia` | ✅ | ✅ | ✅ | None |
+| Trove (NLA) | Australia | `trove` | ✅ | ✅ | — | Required (free — [get key](https://trove.nla.gov.au/about/create-something/using-api)) |
+| Norwegian NL (nb.no) | Norway | `norwegian` | ✅ | — | — | None |
+| DigitalNZ / Papers Past | New Zealand | `digitalnz` | ✅ | ✅ | — | None |
+| Internet Archive | Worldwide | `internet_archive` | ✅ | — | — | None |
+| British Library | United Kingdom | `british_library` | Links only | — | — | None |
+| South African Collections | South Africa | `south_african` | Links only | — | — | None |
 
 ## Features
 
