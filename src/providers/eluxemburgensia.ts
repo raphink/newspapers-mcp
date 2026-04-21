@@ -27,7 +27,36 @@ export async function searchEluxemburgensiaFull(query: string, date_from?: strin
     const authors = (art.authors || []).join(", ");
     const docType = art.type || "";
     const pid = art.pid || "";
+    const articleId = art.article || "";
+    const pageId = art.begin || "";
     const viewerUrl = pid ? `https://viewer.eluxemburgensia.lu/ark:/${pid}` : "";
+
+    // Build snippet coordinates from wordCoordinateSnippets
+    const snippets = art.wordCoordinateSnippets || [];
+    let snippetHint = "";
+    if (pid && snippets.length > 0) {
+      const coords = snippets[0].coordinates || [];
+      if (coords.length > 0) {
+        // Calculate bounding box of first snippet
+        let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+        const page = coords[0].page || "ALTO00001";
+        for (const c of coords) {
+          if (c.x < minX) minX = c.x;
+          if (c.y < minY) minY = c.y;
+          if (c.x + c.w > maxX) maxX = c.x + c.w;
+          if (c.y + c.h > maxY) maxY = c.y + c.h;
+        }
+        // Add padding
+        const pad = 50;
+        minX = Math.max(0, minX - pad);
+        minY = Math.max(0, minY - pad);
+        maxX += pad;
+        maxY += pad;
+        const pageNum = page.replace(/\D/g, "") || "1";
+        const region = `${minX},${minY},${maxX - minX},${maxY - minY}`;
+        snippetHint = `\n   → newspapers_get_snippet(source: "eluxemburgensia", document_id: "${pid}/pages/${parseInt(pageNum)}", snippet_coords: "${region}")`;
+      }
+    }
 
     let entry = `${i + 1}. ${title}`;
     if (date) entry += ` (${date})`;
@@ -36,6 +65,7 @@ export async function searchEluxemburgensiaFull(query: string, date_from?: strin
     if (lang) entry += ` [${lang}]`;
     if (docType) entry += ` (${docType})`;
     if (viewerUrl) entry += `\n   Link: ${viewerUrl}`;
+    entry += snippetHint;
     return entry;
   });
 
